@@ -61,6 +61,10 @@ Model and traning parameters are written into config files under `confs/*.conf`.
 
 
 
+https://user-images.githubusercontent.com/57708879/232410072-43d74df8-9438-4fc8-b302-0cd2c7f659ed.mp4
+
+
+
 ## BibTex
 ```latex
 @article{cheng2023wildlight,
