@@ -1,0 +1,47 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "train synthetic (bunny)",
+            "type": "python",
+            "request": "launch",
+            "program": "exp_runner.py",
+            "console": "integratedTerminal",
+            "args": ["--case", "bunny", "--mode", "train", "--conf", "confs/synthetic.conf", "--download_dataset"],
+            "justMyCode": true
+        },
+
+        {
+            "name": "train real (face)",
+            "type": "python",
+            "request": "launch",
+            "program": "exp_runner.py",
+            "console": "integratedTerminal",
+            "args": ["--case", "face", "--mode", "train", "--conf", "confs/real.conf", "--download_dataset"],
+            "justMyCode": true
+        },
+
+        {
+            "name": "export geomtry (bunny)",
+            "type": "python",
+            "request": "launch",
+            "program": "exp_runner.py",
+            "console": "integratedTerminal",
+            "args": ["--case", "bunny", "--mode", "validate_mesh", "--conf", "confs/synthetic.conf", "--is_continue"],
+            "justMyCode": true
+        },
+
+        {
+            "name": "validate novel view (bunny)",
+            "type": "python",
+            "request": "launch",
+            "program": "exp_runner.py",
+            "console": "integratedTerminal",
+            "args": ["--case", "bunny", "--mode", "validate_image", "--conf", "confs/synthetic.conf", "--is_continue"],
+            "justMyCode": true
+        },
+    ]
+}
