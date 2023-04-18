@@ -48,7 +48,7 @@ Model and traning parameters are written into config files under `confs/*.conf`.
     Intermidiate results can be found under ``exp/legocar/masked/` folder. 
 2. Mesh and texture export.
     ```bash
-    python exp_runner.py --case legocar --conf confs/synthetic.conf --mode validate_geometry --is_continue
+    python exp_runner.py --case legocar --conf confs/synthetic.conf --mode validate_mesh --is_continue
     ```
     This will export a UV-unwraped OBJ file along with PBR texture maps from last checkpoint under `exp/legocar/masked/meshes/` (this might take a few minutes.
 3. Validate novel view rendering. A `dataset_val` must be provided in config.
