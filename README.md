@@ -63,7 +63,10 @@ Model and traning parameters are written into config files under `confs/*.conf`.
 
 https://user-images.githubusercontent.com/57708879/232410072-43d74df8-9438-4fc8-b302-0cd2c7f659ed.mp4
 
+## Acknowledgement
 
+This repo is heavily built upon [NeuS](https://github.com/Totoro97/NeuS). We would like to thank the authors for opening source. 
+Special thanks goes to @wei-mao-2019, a friend and fellow researcher who agreed to appear in our dataset.
 
 ## BibTex
 ```latex
