@@ -10,7 +10,7 @@ conda activate wildlight
 ```
 
 ## Data convention
-Input data are organized in a single folder, where images are saved as exr/png files similar to [NeuS](https://github.com/Totoro97/NeuS), __OR__ packed within a single npy file
+Input data is organized in a single folder, where images are saved as exr/png files similar to [NeuS](https://github.com/Totoro97/NeuS) style, __OR__ packed within a single npy file
 ```
 <case_name xxx>
 |-- cameras_sphere.npz    # camera & lighting parameters
@@ -31,7 +31,7 @@ Or
 ```
 Camera and lighting parameters are stored in `cameras_sphere.npz ` with following key strings:
 - `world_mat_x`: $K_x[R_x|T_x]$ projection matrix from world coordinates to image coordinates
-- `scale_mat_x`: Sim(3) transformation matrix from object coordinates to world coordinates; we will only recover shape & material inside a unit sphere ROI in object coordinates. Usually this is identical accross all views.
+- `scale_mat_x`: Sim(3) transformation matrix from object coordinates to world coordinates; we will only recover shape & material inside a unit sphere ROI in object coordinates. Usually this matrix is static accross all views.
 - `light_energy_x`: an RGB vector for flashlight intensity per view. If using a fixed power flashlight, this is set to $(1,1,1)$ for images under flashlight, or to $(0,0,0)$ for images without flashlight.
 - `max_intensity`: \[optional\] a scalar indicating maximum pixel density (e.g. 255 for 8-bit images), defaults to inf
 
