@@ -5,7 +5,7 @@
 ## Dependencies
 Conda is recommended for installing all dependencies
 ```bash
-conda create env -f environ.yaml
+conda env create -f environ.yaml
 conda activate wildlight
 ```
 
