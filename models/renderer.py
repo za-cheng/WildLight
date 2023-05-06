@@ -255,7 +255,7 @@ class NeuSRenderer:
         # }
 
         return dict(
-            signed_distance = sd.detach.cpu().numpy(),
+            signed_distance = sd.detach().cpu().numpy(),
             object_normal = normals.detach().cpu().numpy(),
             subsurface = subsurface.detach().cpu().numpy(),
             metallic = metallic.detach().cpu().numpy(),

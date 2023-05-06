@@ -586,12 +586,12 @@ class Runner:
             save_to = os.path.join(self.base_exp_dir, 'meshes', '{:0>8d}'.format(self.iter_step))
 
         if simplify:
-            mesh = mesh.as_open3d.simplify_quadric_decimation(131072, (0.5/resolution)**2)
+            mesh = mesh.as_open3d.simplify_quadric_decimation(131072, (0.5/resolution)**2) # max face number 131072 for exported meshes
             print(f"Simplified mesh: {vertices.shape[0]} verts, {triangles.shape[0]} faces -> {len(mesh.vertices)} verts, {len(mesh.triangles)} faces.")
             vertices, triangles = np.asarray(mesh.vertices), np.asarray(mesh.triangles)
 
         if bake_texture_maps:
-            save_dir = os.path.join('{}_textures'.format(save_to))
+            save_dir = os.path.join('{}_export'.format(save_to))
             os.makedirs(save_dir, exist_ok=True)
             print(f"Running UV unwraping (this can take a few minutes) ...")
 
@@ -618,8 +618,8 @@ class Runner:
         
 
         if bake_texture_maps:
-            xatlas.export('{}.obj'.format(save_to), vertices, triangles, uv)
-            print(f"Saved mesh to '{save_to}.obj' and textures under '{save_dir}'.")
+            xatlas.export(os.path.join(save_dir, 'mesh.obj'), vertices, triangles, uv)
+            print(f"Saved mesh and textures under '{save_dir}'.")
         else:
             trimesh.Trimesh(vertices, triangles).export('{}.ply'.format(save_to))
         
