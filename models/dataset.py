@@ -145,8 +145,12 @@ class Dataset:
             self.intrinsics_all.append(torch.from_numpy(intrinsics).float())
             self.pose_all.append(torch.from_numpy(pose).float())
 
-        self.intrinsics_all = torch.stack(self.intrinsics_all).to(self.device)   # [n_images, 4, 4]
+        self.intrinsics_all = torch.stack(self.intrinsics_all)  # [n_images, 4, 4]
         self.intrinsics_all_inv = torch.inverse(self.intrinsics_all)  # [n_images, 4, 4]
+
+        self.intrinsics_all = self.intrinsics_all.to(self.device)  # [n_images, 4, 4]
+        self.intrinsics_all_inv = self.intrinsics_all_inv.to(self.device)  # [n_images, 4, 4]
+        
         self.focal = self.intrinsics_all[0][0, 0]
         self.pose_all = torch.stack(self.pose_all).to(self.device)  # [n_images, 4, 4]
 
