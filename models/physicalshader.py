@@ -110,9 +110,9 @@ def _CC_smith(hz, roughness):
 
 def _diffuse(hz, roughness, subsurface):
     F_D90 = 2*roughness + 0.5
-    base_diffuse = (1 + (F_D90 - 1)*(1-hz**5))**2 / pi
+    base_diffuse = (1 + (F_D90 - 1)*(1-hz)**5)**2 / pi
 
-    F_SS = (1 + (roughness - 1)*(1-hz**5))
+    F_SS = (1 + (roughness - 1)*(1-hz)**5)
     subsurface_diffuse = 1.25 / pi * (F_SS**2 * (0.5/(hz*0.9999+0.0001)-0.5) + 0.5)
 
     return (1-subsurface)*base_diffuse + subsurface*subsurface_diffuse
