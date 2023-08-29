@@ -119,7 +119,7 @@ dependencies:
     - fastjsonschema==2.15.3
     - filelock==3.4.2
     - fonttools==4.32.0
-    - gdown==4.2.0
+    - gdown==4.7.1
     - google-auth==2.5.0
     - google-auth-oauthlib==0.4.6
     - grpcio==1.43.0
