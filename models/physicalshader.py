@@ -34,19 +34,19 @@ def unpack_brdf_params_GGX(brdf_params, n_lobes=None, trichromatic=False, consta
 
     if n_lobes is None:
         n_lobes = (brdf_params-3) // (2+n_channels)
-    
+
     assert n_lobes*(2+n_channels) + 3 == brdf_params.shape[-1]
 
     diffuse_albedo, specular_albedo, roughness, r0 = brdf_params.split([3, n_lobes*n_channels, n_lobes, n_lobes], -1)
 
     diffuse_albedo = F.relu(diffuse_albedo)
     specular_albedo = F.relu(specular_albedo).reshape(specular_albedo.shape[:-1] + (n_channels, n_lobes))
-    roughness = F.sigmoid(roughness)
+    roughness = torch.sigmoid(roughness)
     if constant_r0:
-        r0 = F.sigmoid(r0)
+        r0 = torch.sigmoid(r0)
     else:
         r0 = torch.ones_like(r0)
-    
+
     return diffuse_albedo, _format_brdf_params(specular_albedo, False), _format_brdf_params(roughness), _format_brdf_params(r0)
 
 
@@ -70,8 +70,8 @@ def unpack_brdf_params_burley(brdf_params, brdf_config):
     # clearcoat_gloss 1
     # base_color 3
 
-    
-    brdf_params = F.sigmoid(brdf_params)
+
+    brdf_params = torch.sigmoid(brdf_params)
 
     subsurface, metallic, specular, clearcoar, roughness, clearcoat_gloss, base_color = torch.split(brdf_params, [1,1,1,1,1,1,3], dim=-1)
 
@@ -127,7 +127,7 @@ def _GGX_shading(normal_vecs, incident_vecs, view_vecs, roughness, r0=None, epsi
     returns: (...,k_lobes) specular factors
     '''
     half_vecs = torch.nn.functional.normalize(incident_vecs+view_vecs, dim=-1)
-    
+
     roughness = 0.0001 + (roughness) * (1-epsilon-0.0001)
     # Beckmann model for D
     h_n = dot(half_vecs, normal_vecs, non_negative=True, keepdim=True) # (..., 1)
@@ -151,7 +151,7 @@ def _GGX_shading(normal_vecs, incident_vecs, view_vecs, roughness, r0=None, epsi
 
     # # G = torch.clamp_max(torch.min(i_n, v_n) * 2 * h_n / v_h, 1) # (...)
     # # G = G.unsqueeze(dim=-1) # (..., 1)
-    
+
     # # GGX
     # mask_G = (v_h > 0).float().unsqueeze(dim=-1) # (..., 1)
     # G = 2 / ( torch.sqrt(1 + roughness_sq * (1/v_n.unsqueeze(dim=-1)**2 - 1)) + torch.sqrt(1 + roughness_sq * (1/i_n.unsqueeze(dim=-1)**2 - 1)) )
@@ -173,7 +173,7 @@ def _burley_shading(normal_vecs, incident_vecs, view_vecs, brdf_params, brdf_con
 
     half_vecs = torch.nn.functional.normalize(incident_vecs+view_vecs, dim=-1)
     h_n = dot(half_vecs, normal_vecs, non_negative=True, keepdim=True) # (..., 1)
-    
+
     subsurface, metallic, specular, clearcoat, roughness, clearcoat_gloss, base_color = unpack_brdf_params_burley(brdf_params, brdf_config)
 
     clearcoat_roughness = 0.1 - 0.099 * clearcoat_gloss
@@ -185,7 +185,7 @@ def _burley_shading(normal_vecs, incident_vecs, view_vecs, brdf_params, brdf_con
     if brdf_config.get("mask_shadowing", "joint") == "independent":
         G_metal = G_metal * G_metal
         G_clearcoat = G_clearcoat * G_clearcoat
-    
+
     F_metal = (1-metallic)*specular*0.08 + metallic*base_color # (..., 3)
     F_clearcoat = 0.04
 
@@ -225,7 +225,7 @@ def _apply_lighting_GGX(points, normals, view_dirs, light_dirs, irradiance, diff
 
     specular_reflectance = _GGX_shading(normals, -light_dirs_, -view_dirs, roughness, r0) * specular_albedo # ([k_lobes,] ..., 3) or ([k_lobes,] ..., 1)
     irradiance = torch.unsqueeze(falloff, dim=-1) * irradiance  # (..., 3) or (..., 1)
-    
+
     diffuse_color = diffuse_albedo * irradiance # (..., 3) or (..., 1)
     specular_color = specular_reflectance * irradiance # ([k_lobes,] ..., 3) or ([k_lobes,] ..., 1)
 
@@ -337,8 +337,8 @@ class PhysicalRenderingNetwork(nn.Module):
         return m * (g - 0.5*m)
 
     def forward(self, points, normals, view_dirs, light_origin, light_lum, brdf_params, feature_vectors):
-        
-        
+
+
         light_dir = points - light_origin
         irradiance = light_lum / (light_dir*light_dir).sum(-1,keepdim=True)
 
@@ -361,14 +361,14 @@ class PhysicalRenderingNetwork(nn.Module):
             ambient_color = 0
         else:
             ambient_color = self.ambient_net(
-                                            points, 
-                                            normals, 
-                                            view_dirs, 
-                                            brdf_params, 
+                                            points,
+                                            normals,
+                                            view_dirs,
+                                            brdf_params,
                                             feature_vectors
                                         )
 
-            
+
 
         return ambient_color + (diffuse_active_color + specular_active_color) * self.flash_light_gamma()
 
@@ -440,7 +440,7 @@ class PhysicalNeRF(nn.Module):
             input_pts = self.embed_fn(input_pts)
         if self.embed_fn_view is not None:
             input_views = self.embed_fn_view(input_views)
-            
+
 
         h = input_pts
         for i, l in enumerate(self.pts_linears):
