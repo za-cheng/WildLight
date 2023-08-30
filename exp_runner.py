@@ -27,6 +27,7 @@ from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 
 from models.uv_mapping import generate_uv_map
 
+
 def parametrize(vertices, faces):
     atlas = xatlas.Atlas()
     atlas.add_mesh(vertices, faces)
@@ -41,21 +42,24 @@ def parametrize(vertices, faces):
 def batch_feed(func, data, batch_size=4096):
     ret_data = dict()
 
-    for chunk in tqdm(np.array_split(data, data.shape[0]//batch_size, axis=0)):
+    for chunk in tqdm(np.array_split(data, data.shape[0] // batch_size, axis=0)):
         rst = func(chunk)
         for k in rst:
             ret_data[k] = ret_data.get(k, list())
             ret_data[k].append(rst[k])
-    
+
     return {k: np.concatenate(ret_data[k]) for k in ret_data}
+
 
 class Runner:
     def __init__(self, conf_path, mode='train', case='CASE_NAME', is_continue=False, download_dataset=False):
+        logging.info(f"{case} | {mode}")
+
         self.device = torch.device('cuda')
         self.case = case
 
         if download_dataset:
-            self.download_dataset() # download dataset to default location
+            self.download_dataset()  # download dataset to default location
 
         # Configuration
         self.conf_path = conf_path
@@ -85,7 +89,7 @@ class Runner:
         self.val_mesh_freq = self.conf.get_int('train.val_mesh_freq')
         self.rgb_batch_size = self.conf.get_int('train.rgb_batch_size', self.conf.get_int('train.batch_size', 0))
         self.alpha_batch_size = self.conf.get_int('train.alpha_batch_size', self.conf.get_int('train.batch_size', 0))
-        assert self.rgb_batch_size*self.alpha_batch_size > 0
+        assert self.rgb_batch_size * self.alpha_batch_size > 0
         self.batch_size = self.rgb_batch_size
         self.validate_resolution_level = self.conf.get_int('train.validate_resolution_level')
         self.learning_rate = self.conf.get_float('train.learning_rate')
@@ -113,7 +117,6 @@ class Runner:
         self.deviation_network = SingleVarianceNetwork(**self.conf['model.variance_network']).to(self.device)
         self.color_network = PhysicalRenderingNetwork(self.conf['model.physical_rendering_network'], self.conf['model.brdf_settings']).to(self.device)
 
-
         params_to_train += list(self.nerf_outside.parameters())
         params_to_train += list(self.sdf_network.parameters())
         params_to_train += list(self.deviation_network.parameters())
@@ -130,14 +133,14 @@ class Runner:
 
         # Load checkpoint
         latest_model_name = None
-        if is_continue:
+        if is_continue and os.path.isdir(os.path.join(self.base_exp_dir, 'checkpoints')):
             model_list_raw = os.listdir(os.path.join(self.base_exp_dir, 'checkpoints'))
             model_list = []
             for model_name in model_list_raw:
                 if model_name[-3:] == 'pth':
                     model_list.append(model_name)
             model_list.sort()
-            latest_model_name = model_list[-1]
+            latest_model_name = model_list[-1] if len(model_list) > 0 else None
 
         if latest_model_name is not None:
             logging.info('Find checkpoint: {}'.format(latest_model_name))
@@ -146,7 +149,7 @@ class Runner:
         # Backup codes and configs for debug
         if self.mode[:5] == 'train':
             self.file_backup()
-    
+
     def download_dataset(self):
 
         if self.case == 'bunny' and not os.path.exists('datasets/synthetic/bunny'):
@@ -176,8 +179,7 @@ class Runner:
         if self.case == 'face' and not os.path.exists('datasets/real/face'):
             gdown.download(id="1PziEgW_X_f4hNAiE_WWmbvALrzD06sJR", output="datasets/face.zip")
             gdown.extractall("datasets/face.zip", "datasets")
-            os.remove("datasets/face.zip")   
-
+            os.remove("datasets/face.zip")
 
     @torch.no_grad()
     def validate_images(self, resolution_level=1):
@@ -185,7 +187,6 @@ class Runner:
             resolution_level = self.validate_resolution_level
 
         psnr, ssim = [], []
-
 
         os.makedirs(os.path.join(self.base_exp_dir, 'novel_view'), exist_ok=True)
 
@@ -203,25 +204,25 @@ class Runner:
             img[mask < 0.5] = 0
             img_rendered[mask < 0.5] = 0
 
-            #print(img.shape, img_rendered.shape)
+            # print(img.shape, img_rendered.shape)
             psnr.append(peak_signal_noise_ratio(img, img_rendered, data_range=img.max()))
-            ssim.append(structural_similarity(img, img_rendered, data_range=img.max(),multichannel=True))
+            ssim.append(structural_similarity(img, img_rendered, data_range=img.max(), multichannel=True))
 
-            cv.imwrite(os.path.join(self.base_exp_dir, 'novel_view', f"{i:02}.exr"), np.concatenate([img_rendered[...,::-1], mask.reshape(img_rendered.shape[:-1] + (-1,))[...,:1]], axis=-1))
+            cv.imwrite(os.path.join(self.base_exp_dir, 'novel_view', f"{i:0{self.lz_n()}}.exr"), np.concatenate([img_rendered[..., ::-1], mask.reshape(img_rendered.shape[:-1] + (-1,))[..., :1]], axis=-1))
 
         psnr = np.array(psnr)
         ssim = np.array(ssim)
 
-        has_flash_light = np.stack(self.dataset.light_energies).max(-1) > 0
+        has_flash_light = np.concatenate(self.dataset.light_energies).max(axis=-1) > 0
 
-        psnr_ambient, psnr_flash, psnr_all = psnr[has_flash_light==False].mean(), psnr[has_flash_light].mean(), psnr.mean()
-        ssim_ambient, ssim_flash, ssim_all = ssim[has_flash_light==False].mean(), ssim[has_flash_light].mean(), ssim.mean()
+        psnr_ambient, psnr_flash, psnr_all = psnr[has_flash_light == False].mean(), psnr[has_flash_light].mean(), psnr.mean()
+        ssim_ambient, ssim_flash, ssim_all = ssim[has_flash_light == False].mean(), ssim[has_flash_light].mean(), ssim.mean()
 
-        print( tabulate([['img', 'ambient', 'flash', 'all'], 
-                         ['psnr', psnr_ambient, psnr_flash, psnr_all], 
-                         ['ssim', ssim_ambient, ssim_flash, ssim_all]], headers='firstrow', tablefmt='github'))
+        print(tabulate([['img', 'ambient', 'flash', 'all'],
+                        ['psnr', psnr_ambient, psnr_flash, psnr_all],
+                        ['ssim', ssim_ambient, ssim_flash, ssim_all]], headers='firstrow', tablefmt='github'))
 
-        return psnr, ssim    
+        return psnr, ssim
 
     def train(self, sample_mode="batch"):
         self.writer = SummaryWriter(log_dir=os.path.join(self.base_exp_dir, 'logs'))
@@ -236,13 +237,13 @@ class Runner:
             seed = int(time.time() * 1000) % 1000000 + iter_i
 
             def closure(mode="rgb", x_shift=0, y_shift=0):
-                if sample_mode == "patch":  
-                    data = self.dataset.gen_random_rays_patch(image_perm[img_idx], int(np.sqrt(self.rgb_batch_size)), mode=="rgb", shift=(x_shift,y_shift), seed=seed)
+                if sample_mode == "patch":
+                    data = self.dataset.gen_random_rays_patch(image_perm[img_idx], int(np.sqrt(self.rgb_batch_size)), mode == "rgb", shift=(x_shift, y_shift), seed=seed)
                 else:
-                    data = self.dataset.gen_random_rays_at(image_perm[img_idx], self.rgb_batch_size, mode=="rgb", shift=(x_shift,y_shift), seed=seed)
-                
+                    data = self.dataset.gen_random_rays_at(image_perm[img_idx], self.rgb_batch_size, mode == "rgb", shift=(x_shift, y_shift), seed=seed)
+
                 light_o, light_lumen = self.dataset.gen_light_params(image_perm[img_idx])
-                rays_o, rays_d, true_rgb, mask = data[..., :3], data[..., 3: 6], data[..., 6: 9], data[..., 9: 10]
+                rays_o, rays_d, true_rgb, mask = data[..., :3], data[..., 3:6], data[..., 6:9], data[..., 9:10]
                 near, far = self.dataset.near_far_from_sphere(rays_o, rays_d)
 
                 background_rgb = None
@@ -252,28 +253,28 @@ class Runner:
                 mask = (mask > 0.5).float()
 
                 if mode == "rgb":
-                    render_out = self.renderer.render(rays_o, rays_d, light_o, light_lumen, near, far, 
-                                                    background_rgb=background_rgb,
-                                                    cos_anneal_ratio=self.get_cos_anneal_ratio())
+                    render_out = self.renderer.render(rays_o, rays_d, light_o, light_lumen, near, far,
+                                                      background_rgb=background_rgb,
+                                                      cos_anneal_ratio=self.get_cos_anneal_ratio())
                 elif mode == 'alpha':
+                    render_out = self.renderer.render_alpha(rays_o, rays_d, light_o, light_lumen, near, far,
+                                                            background_rgb=background_rgb,
+                                                            cos_anneal_ratio=self.get_cos_anneal_ratio())
 
-                    render_out = self.renderer.render_alpha(rays_o, rays_d, light_o, light_lumen, near, far, 
-                                                    background_rgb=background_rgb,
-                                                    cos_anneal_ratio=self.get_cos_anneal_ratio())
                 return render_out, true_rgb, mask, light_lumen
 
             def sample_pixels(n_samples):
                 n_samples = int(np.sqrt(n_samples))
                 ret = dict()
-                keys=['color_fine', 's_val', 'cdf_fine', 'gradient_error', 'weight_max', 'weight_sum']
-                for i in np.arange(0.5/n_samples,1,1/n_samples):
-                    for j in np.arange(0.5/n_samples,1,1/n_samples):  
+                keys = ['color_fine', 's_val', 'cdf_fine', 'gradient_error', 'weight_max', 'weight_sum']
+                for i in np.arange(0.5 / n_samples, 1, 1 / n_samples):
+                    for j in np.arange(0.5 / n_samples, 1, 1 / n_samples):
                         offset_x = i - 0.5
                         offset_y = j - 0.5
-                        
+
                         render_out, true_rgb, mask, light_lumen = closure("rgb", offset_x, offset_y)
                         for k in keys:
-                            ret[k] = (ret.get(k,0) + render_out[k]/(n_samples**2))
+                            ret[k] = (ret.get(k, 0) + render_out[k] / (n_samples ** 2))
 
                 return ret, true_rgb, mask, light_lumen
 
@@ -292,8 +293,8 @@ class Runner:
 
             mask_sum = (mask * valid_pixel_mask).sum() + 1e-5
 
-            if sample_mode == "patch":  
-                color_dssim = loss_dssim(color_fine, true_rgb, mask>0, valid_pixel_mask>0, cap_pixel_val, self.dssim_window_size)
+            if sample_mode == "patch":
+                color_dssim = loss_dssim(color_fine, true_rgb, mask > 0, valid_pixel_mask > 0, cap_pixel_val, self.dssim_window_size)
             else:
                 color_dssim = 0
 
@@ -305,17 +306,17 @@ class Runner:
                 print(self.rgb_loss_type)
                 raise NotImplementedError
 
-            psnr = 20.0 * torch.log10(1.0 / (((color_fine - true_rgb)**2 * mask).sum() / (mask_sum * 3.0)).sqrt())
+            psnr = 20.0 * torch.log10(1.0 / (((color_fine - true_rgb) ** 2 * mask).sum() / (mask_sum * 3.0)).sqrt())
 
             eikonal_loss = gradient_error
 
             self.optimizer.zero_grad()
 
-            loss = color_fine_loss +\
-                   color_dssim * self.dssim_weight +\
+            loss = color_fine_loss + \
+                   color_dssim * self.dssim_weight + \
                    eikonal_loss * self.igr_weight
             loss.backward()
-            
+
             if self.mask_weight > 0:
                 render_out_alpha, _, mask_alpha, _ = closure("alpha")
                 mask_loss = F.binary_cross_entropy(render_out_alpha['weight_sum'].clip(1e-3, 1.0 - 1e-3), mask_alpha)
@@ -335,7 +336,7 @@ class Runner:
             self.writer.add_scalar('Statistics/cdf', (cdf_fine[:, :1] * mask).sum() / mask_sum, self.iter_step)
             self.writer.add_scalar('Statistics/weight_max', (weight_max * mask).sum() / mask_sum, self.iter_step)
             self.writer.add_scalar('Statistics/psnr', psnr, self.iter_step)
-        
+
             if self.iter_step % self.save_freq == 0:
                 self.save_checkpoint()
 
@@ -349,6 +350,16 @@ class Runner:
 
             if self.iter_step % len(image_perm) == 0:
                 image_perm = self.get_image_perm()
+
+        # Save final state if it wasn't saved just now
+        if self.iter_step % self.save_freq != 0:
+            self.save_checkpoint()
+
+        if self.iter_step % self.val_freq != 0:
+            self.validate_image(log_to_tb=True)
+
+        if self.iter_step % self.val_mesh_freq != 0:
+            self.validate_mesh(world_space=True, log_to_tb=True)
 
     def get_image_perm(self):
         return torch.randperm(self.dataset.n_images)
@@ -405,7 +416,7 @@ class Runner:
         }
 
         os.makedirs(os.path.join(self.base_exp_dir, 'checkpoints'), exist_ok=True)
-        torch.save(checkpoint, os.path.join(self.base_exp_dir, 'checkpoints', 'ckpt_{:0>6d}.pth'.format(self.iter_step)))
+        torch.save(checkpoint, os.path.join(self.base_exp_dir, 'checkpoints', 'ckpt_{:0>{}}.pth'.format(self.iter_step, self.lz_iter())))
 
     @torch.no_grad()
     def save_normal_and_depth(self, path):
@@ -427,15 +438,16 @@ class Runner:
                 background_rgb = torch.ones([1, 3]) if self.use_white_bkgd else None
 
                 render_out = self.renderer.render(rays_o_batch,
-                                                rays_d_batch,
-                                                light_o,
-                                                light_lum,
-                                                near,
-                                                far,
-                                                cos_anneal_ratio=self.get_cos_anneal_ratio(),
-                                                background_rgb=background_rgb)
+                                                  rays_d_batch,
+                                                  light_o,
+                                                  light_lum,
+                                                  near,
+                                                  far,
+                                                  cos_anneal_ratio=self.get_cos_anneal_ratio(),
+                                                  background_rgb=background_rgb)
 
-                def feasible(key): return (key in render_out) and (render_out[key] is not None)
+                def feasible(key):
+                    return (key in render_out) and (render_out[key] is not None)
 
                 assert feasible('gradients') and feasible('weights')
                 n_samples = self.renderer.n_samples + self.renderer.n_importance
@@ -443,23 +455,23 @@ class Runner:
                 dists = render_out['z'] * render_out['weights'][:, :n_samples]
                 if feasible('inside_sphere'):
                     normals = normals * render_out['inside_sphere'][..., None]
-                    dists = dists * render_out['inside_sphere'] 
+                    dists = dists * render_out['inside_sphere']
                 normals = normals.sum(dim=1).detach().cpu().numpy()
                 dists = (dists.sum(dim=1) / render_out['weights'][:, :n_samples].sum(dim=1)).detach().cpu().numpy()
                 out_normal_fine.append(normals)
                 out_dist_fine.append(dists)
                 del render_out
 
-            normal_img = np.concatenate(out_normal_fine, axis=0).reshape(H,W,3)
+            normal_img = np.concatenate(out_normal_fine, axis=0).reshape(H, W, 3)
             normal_img = normal_img / (1e-10 + np.linalg.norm(normal_img, axis=-1, keepdims=True))
             normal_maps.append(normal_img)
 
-            dist_img = np.concatenate(out_dist_fine, axis=0).reshape(H,W)
+            dist_img = np.concatenate(out_dist_fine, axis=0).reshape(H, W)
             depth_img = depth_distance_ratio * dist_img
             depth_maps.append(depth_img)
-        
-        np.savez(path, depth_maps=np.stack(depth_maps,axis=0), normal_maps=np.stack(normal_maps,axis=0))
 
+        np.savez(path, depth_maps=np.stack(depth_maps, axis=0), normal_maps=np.stack(normal_maps, axis=0))
+        return
 
     @torch.no_grad()
     def validate_image(self, idx=-1, resolution_level=-1, log_to_tb=False, printf=print):
@@ -492,7 +504,8 @@ class Runner:
                                               cos_anneal_ratio=self.get_cos_anneal_ratio(),
                                               background_rgb=background_rgb)
 
-            def feasible(key): return (key in render_out) and (render_out[key] is not None)
+            def feasible(key):
+                return (key in render_out) and (render_out[key] is not None)
 
             if feasible('color_fine'):
                 out_rgb_fine.append(render_out['color_fine'].detach().cpu().numpy())
@@ -521,22 +534,19 @@ class Runner:
 
         for i in range(img_fine.shape[-1]):
             if len(out_rgb_fine) > 0:
-                cv.imwrite(os.path.join(self.base_exp_dir,
-                                        'validations_fine',
-                                        '{:0>8d}_{}_{}.png'.format(self.iter_step, i, idx)),
-                           np.concatenate([img_fine[..., i],
-                                           self.dataset.image_at(idx, resolution_level=resolution_level)])[...,::-1])
+                cv.imwrite(os.path.join(self.base_exp_dir, 'validations_fine', '{:0>{}}_{}_{}.png'.format(self.iter_step, self.lz_iter(), i, idx)),
+                           np.concatenate([img_fine[..., i], self.dataset.image_at(idx, resolution_level=resolution_level)])[..., ::-1])
             if len(out_normal_fine) > 0:
-                cv.imwrite(os.path.join(self.base_exp_dir,
-                                        'normals',
-                                        '{:0>8d}_{}_{}.png'.format(self.iter_step, i, idx)),
-                           normal_img[..., i][...,::-1])
+                cv.imwrite(os.path.join(self.base_exp_dir, 'normals', '{:0>{}}_{}_{}.png'.format(self.iter_step, self.lz_iter(), i, idx)),
+                           normal_img[..., i][..., ::-1])
+                np.save(os.path.join(self.base_exp_dir, 'normals', '{:0>{}}_{}_{}'.format(self.iter_step, self.lz_iter(), i, idx)), normal_img[..., i][..., ::-1])
 
         img = np.concatenate(out_rgb_fine, axis=0).reshape([H, W, 3])
         if log_to_tb and self.writer:
             self.writer.add_image(f'idx:{idx}', img, global_step=self.iter_step, dataformats='HWC')
 
         return img
+
     @torch.no_grad()
     def render_novel_image(self, idx_0, idx_1, ratio, resolution_level):
         """
@@ -575,7 +585,7 @@ class Runner:
         bound_max = torch.tensor(self.dataset.object_bbox_max, dtype=torch.float32)
 
         print(f"Extracting mesh from marching cubes at resolution {resolution}...")
-        vertices, triangles =\
+        vertices, triangles = \
             self.renderer.extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold)
         os.makedirs(os.path.join(self.base_exp_dir, 'meshes'), exist_ok=True)
 
@@ -583,10 +593,10 @@ class Runner:
         vertices, triangles = mesh.vertices, mesh.faces
 
         if save_to is None:
-            save_to = os.path.join(self.base_exp_dir, 'meshes', '{:0>8d}'.format(self.iter_step))
+            save_to = os.path.join(self.base_exp_dir, 'meshes', '{:0>{}}'.format(self.iter_step, self.lz_iter()))
 
         if simplify:
-            mesh = mesh.as_open3d.simplify_quadric_decimation(131072, (0.5/resolution)**2) # max face number 131072 for exported meshes
+            mesh = mesh.as_open3d.simplify_quadric_decimation(131072, (0.5 / resolution) ** 2)  # max face number 131072 for exported meshes
             print(f"Simplified mesh: {vertices.shape[0]} verts, {triangles.shape[0]} faces -> {len(mesh.vertices)} verts, {len(mesh.triangles)} faces.")
             vertices, triangles = np.asarray(mesh.vertices), np.asarray(mesh.triangles)
 
@@ -598,7 +608,7 @@ class Runner:
             coords, vertices, triangles, uv = generate_uv_map(vertices, triangles, texture_resolution)
 
             print(f"Baking textures at resolution {coords.shape[0]}X{coords.shape[1]}.")
-            brdf_params = batch_feed(self.renderer.extract_shading_params, coords.reshape(-1,3))
+            brdf_params = batch_feed(self.renderer.extract_shading_params, coords.reshape(-1, 3))
 
             for k in ['object_normal', 'subsurface', 'metallic', 'specular', 'clearcoat', 'roughness', 'clearcoat_gloss', 'base_color']:
                 if k == 'object_normal':
@@ -606,36 +616,33 @@ class Runner:
                 else:
                     texture = brdf_params[k].reshape(coords.shape[0], coords.shape[1], -1) * 255
                 if k == 'object_normal' or k == 'base_color':
-                    cv.imwrite(os.path.join(save_dir, f"{k}.png"), texture.clip(0, 255)[...,::-1]) # opencv saves in BGR format
+                    cv.imwrite(os.path.join(save_dir, f"{k}.png"), texture.clip(0, 255)[..., ::-1])  # opencv saves in BGR format
                 else:
-                    cv.imwrite(os.path.join(save_dir, f"{k}.png"), texture.clip(0, 255)) # gray image
-            
-            cv.imwrite(os.path.join(save_dir, f"coords.exr"), coords.reshape(coords.shape[0], coords.shape[1], -1).astype(np.float32)[...,::-1])
-            
+                    cv.imwrite(os.path.join(save_dir, f"{k}.png"), texture.clip(0, 255))  # gray image
+
+            cv.imwrite(os.path.join(save_dir, f"coords.exr"), coords.reshape(coords.shape[0], coords.shape[1], -1).astype(np.float32)[..., ::-1])
 
         if world_space:
             vertices = vertices * self.dataset.scale_mats_np[0][0, 0] + self.dataset.scale_mats_np[0][:3, 3][None]
-        
 
         if bake_texture_maps:
             xatlas.export(os.path.join(save_dir, 'mesh.obj'), vertices, triangles, uv)
             print(f"Saved mesh and textures under '{save_dir}'.")
         else:
             trimesh.Trimesh(vertices, triangles).export('{}.ply'.format(save_to))
-        
+
         if log_to_tb and self.writer:
             self.writer.add_mesh('shape', torch.from_numpy(vertices).unsqueeze(0), faces=torch.from_numpy(triangles).unsqueeze(0), global_step=self.iter_step)
         logging.info('End')
 
-    
-    def interpolate_view(self, img_idx_0, img_idx_1, n_frames = 60):
+    def interpolate_view(self, img_idx_0, img_idx_1, n_frames=60):
         images = []
         for i in range(n_frames):
             print(i)
             images.append(self.render_novel_image(img_idx_0,
                                                   img_idx_1,
                                                   np.sin(((i / n_frames) - 0.5) * np.pi) * 0.5 + 0.5,
-                          resolution_level=2))
+                                                  resolution_level=2))
         for i in range(n_frames):
             images.append(images[n_frames - i - 2])
 
@@ -643,14 +650,21 @@ class Runner:
         video_dir = os.path.join(self.base_exp_dir, 'render')
         os.makedirs(video_dir, exist_ok=True)
         h, w, _ = images[0].shape
-        writer = cv.VideoWriter(os.path.join(video_dir,
-                                             '{:0>8d}_{}_{}.mp4'.format(self.iter_step, img_idx_0, img_idx_1)),
+        writer = cv.VideoWriter(os.path.join(video_dir,'{:0>{}}_{}_{}.mp4'.format(self.iter_step, self.lz_iter(), img_idx_0, img_idx_1)),
                                 fourcc, 30, (w, h))
 
         for image in images:
-            writer.write((image*256).clip(0, 255).astype(np.uint8))
+            writer.write((image * 256).clip(0, 255).astype(np.uint8))
 
         writer.release()
+
+    def lz_iter(self):
+        '''Computes the number of leading zeros necessary for saving files, depending on end_iter'''
+        return len(str(int(self.end_iter)))
+
+    def lz_n(self):
+        '''Computes the number of leading zeros necessary for saving files, depending on dataset.n_images'''
+        return len(str(int(self.dataset.n_images)))
 
 
 if __name__ == '__main__':
@@ -669,7 +683,6 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--case', type=str, default='')
     parser.add_argument('--download_dataset', action='store_true')
-
 
     args = parser.parse_args()
 
@@ -699,6 +712,3 @@ if __name__ == '__main__':
                 resolution_level = int(args.mode.split('_')[2])
 
         runner.validate_images(resolution_level)
-            
-            
-
